@@ -425,14 +425,14 @@ tbody tr:last-child td{border-bottom:none;}
     <div id="auth-msg"></div>
 
     <form id="signin-form" onsubmit="return handleSignIn(event)">
-      <div class="field"><label>อีเมล</label><input type="email" id="si-email" required autocomplete="username"></div>
+      <div class="field"><label>Username (English)</label><input type="text" id="si-email" required autocomplete="username"></div>
       <div class="field"><label>รหัสผ่าน</label><input type="password" id="si-password" required autocomplete="current-password"></div>
       <button class="btn btn-primary" type="submit" id="si-btn">เข้าสู่ระบบ</button>
     </form>
 
     <form id="signup-form" style="display:none" onsubmit="return handleSignUp(event)">
       <div class="field"><label>ชื่อ-สกุล</label><input type="text" id="su-name" required></div>
-      <div class="field"><label>อีเมล</label><input type="email" id="su-email" required autocomplete="username"></div>
+      <div class="field"><label>Username (English)</label><input type="email" id="su-email" required autocomplete="username"></div>
       <div class="field"><label>รหัสผ่าน (อย่างน้อย 6 ตัวอักษร)</label><input type="password" id="su-password" minlength="6" required autocomplete="new-password"></div>
       <button class="btn btn-primary" type="submit" id="su-btn">สมัครสมาชิก</button>
     </form>
@@ -452,7 +452,7 @@ tbody tr:last-child td{border-bottom:none;}
           <path d="M6.5 3.2c1.5 0 2.7 1.2 2.7 2.7 0 .4-.1.8-.2 1.1l6.4 6.4c.3-.1.7-.2 1.1-.2 1.5 0 2.7 1.2 2.7 2.7s-1.2 2.7-2.7 2.7c-1.5 0-2.7-1.2-2.7-2.7 0-.4.1-.8.2-1.1L7.6 8.4c-.3.1-.7.2-1.1.2-1.5 0-2.7-1.2-2.7-2.7s1.2-2.7 2.7-2.7z" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
         </svg>
       </div>
-      <div class="titles"><b>TKA Registry</b><span>Total Knee Arthroplasty * SM HOSP * Develop ฺby Udomsak Thouekaew</span></div>
+      <div class="titles"><b>TKA Registry</b><span>Total Knee Arthroplasty*SM HOSP*Develpo by Udomsak Thoukaew</span></div>
     </div>
     <div class="nav-tabs">
       <button data-view="dashboard" class="active" onclick="showView('dashboard')">แดชบอร์ด</button>
@@ -702,6 +702,22 @@ tbody tr:last-child td{border-bottom:none;}
 <div id="lightbox" onclick="closeLightbox()"><button class="lb-close" onclick="closeLightbox()">✕</button><img id="lightbox-img"></div>
 
 <script>
+
+/*
+SUPABASE MIGRATION REQUIRED:
+
+alter table public.profiles add column if not exists username text;
+alter table public.profiles add column if not exists email text;
+
+create unique index if not exists profiles_username_unique
+  on public.profiles (lower(username))
+  where username is not null;
+
+-- สำหรับบัญชีเดิมที่ Username เป็นภาษาไทย:
+-- ไม่ต้องลบบัญชีหรือเปลี่ยน Auth user
+-- ให้ตั้ง username ภาษาอังกฤษใหม่ใน profiles ให้ตรงกับ user id เดิม
+*/
+
 /* ============================================================
    ⚙️  ตั้งค่าการเชื่อมต่อ Supabase ตรงนี้
    ============================================================ */
@@ -751,6 +767,34 @@ function restoreLastView(){
   }catch(e){}
 }
 
+
+async function changeUsername(){
+  const current = (currentUser?.user_metadata?.username || '').trim();
+  const username = prompt('ตั้ง Username ใหม่ (ภาษาอังกฤษเท่านั้น)', current);
+  if(username === null) return;
+  const u = username.trim();
+  if(!/^[A-Za-z][A-Za-z0-9._-]{2,31}$/.test(u)){
+    showToast('Username ต้องเป็นภาษาอังกฤษเท่านั้น และยาว 3–32 ตัวอักษร', true);
+    return;
+  }
+
+  const { data: exists, error: checkError } = await sb
+    .from('profiles')
+    .select('id')
+    .eq('username', u)
+    .neq('id', currentUser.id)
+    .maybeSingle();
+
+  if(checkError){ showToast('ตรวจสอบ Username ไม่สำเร็จ: ' + checkError.message, true); return; }
+  if(exists){ showToast('Username นี้ถูกใช้แล้ว', true); return; }
+
+  const { error } = await sb.from('profiles').update({ username: u }).eq('id', currentUser.id);
+  if(error){ showToast('เปลี่ยน Username ไม่สำเร็จ: ' + error.message, true); return; }
+
+  await sb.auth.updateUser({ data: { username: u } });
+  showToast('เปลี่ยน Username เรียบร้อย');
+}
+
 /* ---------------- AUTH ---------------- */
 function switchAuthTab(tab){
   document.getElementById('tab-signin').classList.toggle('active', tab==='signin');
@@ -782,6 +826,18 @@ async function handleSignUp(e){
   const email = document.getElementById('su-email').value.trim();
   const password = document.getElementById('su-password').value;
   const { data, error } = await sb.auth.signUp({ email, password, options: { data: { full_name } } });
+    if(!error && data?.user){
+      const { error: profileError } = await sb.from('profiles').upsert({
+        id: data.user.id,
+        email: email,
+        username: username
+      }, { onConflict: 'id' });
+      if(profileError){
+        showToast('สร้างบัญชีสำเร็จ แต่บันทึก Username ไม่สำเร็จ: ' + profileError.message, true);
+        return false;
+      }
+    }
+
   btn.disabled = false; btn.textContent = 'สมัครสมาชิก';
   if(error){ document.getElementById('auth-error').textContent = translateAuthError(error.message); return false; }
   if(data.session){
