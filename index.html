@@ -295,6 +295,34 @@ tbody tr:last-child td{border-bottom:none;}
 .badge-staff{background:var(--primary-glow); color:var(--primary);}
 .badge-viewer{background:var(--surface-2); color:var(--ink-soft);}
 
+
+@media print{
+  @page{size:A4 portrait;margin:8mm 8mm 9mm 8mm}
+  html,body{width:210mm;min-height:297mm;background:#fff !important;color:#111 !important}
+  body{font-family:Arial,"Noto Sans Thai",sans-serif;font-size:8.5pt;line-height:1.2}
+  #app-shell{display:block !important}
+  #app-shell > .topbar,#config-warning,main > .view > .page-head .btn,.no-print,#bottom-nav,
+  #view-list,#view-form,#view-users,#toast,#lightbox{display:none !important}
+  #view-detail{display:block !important;margin:0 !important;padding:0 !important}
+  #view-detail .page-head{display:block !important;margin:0 0 5mm !important;padding:0 0 2mm !important;border-bottom:1px solid #222}
+  #detail-title{font-size:17pt !important;margin:0 !important;line-height:1.1}
+  #detail-sub{font-size:8.5pt !important;margin:1mm 0 0 !important;color:#444 !important}
+  #view-detail .card{box-shadow:none !important;border:0 !important;border-radius:0 !important;padding:0 !important;margin:0 !important}
+  #detail-body{font-size:8pt !important}
+  #detail-body .detail-grid{display:grid !important;grid-template-columns:repeat(4,minmax(0,1fr)) !important;gap:1.5mm !important}
+  #detail-body .detail-item{padding:1.4mm 1.8mm !important;border:0.25mm solid #ddd !important;border-radius:1.2mm !important;background:#fafafa !important;min-height:8.5mm !important;break-inside:avoid}
+  #detail-body .detail-item .k{display:block !important;font-size:6.5pt !important;color:#666 !important;margin-bottom:.6mm !important}
+  #detail-body .detail-item .v{display:block !important;font-size:8pt !important;font-weight:600 !important;white-space:normal !important}
+  #detail-gallery-card{display:block !important;margin-top:3mm !important}
+  #detail-gallery-card h3{font-size:9pt !important;margin:0 0 1.5mm !important}
+  #detail-gallery{display:grid !important;grid-template-columns:repeat(4,1fr) !important;gap:2mm !important}
+  #detail-gallery > div{break-inside:avoid;text-align:center}
+  #detail-gallery img{width:100% !important;height:25mm !important;object-fit:cover !important;border-radius:1mm !important}
+  #detail-gallery .gcap{font-size:6.5pt !important;color:#555 !important;margin-top:.5mm !important}
+  #print-footer{display:block !important;margin-top:2.5mm !important;padding-top:1.5mm;border-top:.25mm solid #bbb;font-size:6.5pt;color:#666;text-align:right}
+}
+#print-footer{display:none}
+
 @media print{
   #app-shell > .topbar, #config-warning, main > .view > .page-head .btn, .no-print, #bottom-nav{display:none !important;}
   main{max-width:100%; padding:0;}
@@ -396,6 +424,20 @@ tbody tr:last-child td{border-bottom:none;}
 .detail-value{font-size:14px;font-weight:600;word-break:break-word}
 @media(max-width:800px){.detail-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:520px){.detail-grid{grid-template-columns:1fr}}
+
+
+/* Patient detail grouped layout */
+.patient-detail-group{margin:0 0 16px;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;background:#fff}
+.patient-detail-group-title{padding:9px 12px;background:#f5f7fa;font-weight:700;font-size:14px;border-bottom:1px solid #e5e7eb}
+.patient-detail-group-body{padding:10px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.patient-detail-item{padding:8px 10px;border:1px solid #eef0f3;border-radius:7px;background:#fafbfc}
+.patient-detail-item .label{font-size:11px;color:#6b7280;margin-bottom:2px}
+.patient-detail-item .value{font-size:13px;font-weight:600;word-break:break-word}
+@media(max-width:800px){.patient-detail-group-body{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:520px){.patient-detail-group-body{grid-template-columns:1fr}}
+@media print{
+  .patient-detail-group{break-inside:avoid}
+}
 
 </style>
 </head>
@@ -499,7 +541,7 @@ tbody tr:last-child td{border-bottom:none;}
       <div class="page-head">
         <div><h1>แดชบอร์ด</h1><p>ภาพรวมข้อมูลผ่าตัดเปลี่ยนข้อเข่าทั้งหมดในระบบ</p></div>
         <button class="btn" onclick="loadDashboard()">↻ รีเฟรช</button>
-      </div>
+      <button class="btn no-print admin-gate gate-hidden" id="sync-google-btn" onclick="syncAllToGoogleSheets()">☁ สำรองไป Google Sheets</button></div>
       <div id="vitals-strip" class="vitals-strip"><div class="loading"><span class="spinner"></span> กำลังโหลดข้อมูล…</div></div>
       <div class="card chart-card">
         <h3>จำนวนเคสรายเดือน</h3>
@@ -679,9 +721,10 @@ tbody tr:last-child td{border-bottom:none;}
         </div>
       </div>
       <div class="card card-pad" id="detail-body"></div>
-      <div class="card card-pad" style="margin-top:16px;">
+      <div class="card card-pad" id="detail-gallery-card" style="margin-top:16px;">
         <h3 style="margin-top:0; font-size:15px;">รูปภาพ</h3>
         <div class="gallery" id="detail-gallery"></div>
+        <div id="print-footer">TKA Registry — Patient Report</div>
       </div>
     </section>
 
@@ -725,8 +768,8 @@ create unique index if not exists profiles_username_unique
    ============================================================ */
 const SUPABASE_URL = "https://vpxzjpxbubcejovsdyvc.supabase.co";
 
-const GOOGLE_SHEETS_BACKUP_URL = ''; // ใส่ Web App URL ของ Google Apps Script
-const GOOGLE_SHEETS_BACKUP_SECRET = ''; // ต้องตรงกับ WEBHOOK_SECRET ใน Apps Script
+const GOOGLE_SHEETS_BACKUP_URL = 'https://script.google.com/macros/s/AKfycbxQnsenzEW42WT2w_uZ5ZBBrhzxNOaZkR7A-u9ejsprxlqgQuUEwph7w55OzURA43TXkA/exec'; // ใส่ Web App URL ของ Google Apps Script
+const GOOGLE_SHEETS_BACKUP_SECRET = 'My_Webhook_Secret_Is_260625_ORSMH'; // ต้องตรงกับ WEBHOOK_SECRET ใน Apps Script
 const SUPABASE_ANON_KEY = "sb_publishable_U56PTBiQx88lMor14Mzh7Q_l0_RQju9";
 // Google Sheets backup is handled server-side by Supabase Database Webhooks; no patient data is sent directly from the browser.
 /* ============================================================ */
@@ -989,6 +1032,88 @@ function applyRoleUI(){
 }
 
 /* ---------------- NAV ---------------- */
+
+function renderPatientDetailGrouped(rec){
+  const body = document.getElementById('detail-body');
+  if(!body) return;
+
+  const groups = [
+    {
+      title: '1. ข้อมูลผู้ป่วย',
+      fields: [
+        ['hn','HN'],['name_prefix','คำนำหน้า'],['first_name','ชื่อ'],['last_name','นามสกุล'],
+        ['gender','เพศ'],['age','อายุ'],['weight_kg','น้ำหนัก (กก.)'],['height_cm','ส่วนสูง (ซม.)'],['bmi','BMI'],
+        ['procedure','Procedure'],['surgery_date','วันที่ผ่าตัด']
+      ]
+    },
+    {
+      title: '2. LAB',
+      fields: [
+        ['hct','Hct'],['hb','Hb'],['egfr','eGFR'],['cr','Cr'],['alb','Alb'],['hba1c','HbA1C']
+      ]
+    },
+    {
+      title: '3. Tourniquet (TQ)',
+      fields: [
+        ['tq_mmhg','TQ (mmHg)'],['tq_start','TQ Start'],['tq_end','TQ End'],['tq_duration_min','TQ Duration']
+      ]
+    },
+    {
+      title: '4. Alignment',
+      fields: [
+        ['extension_lag_deg','Extension lat (°)'],['varus_deg','Varus (°)'],['valgus_deg','Valgus (°)']
+      ]
+    },
+    {
+      title: '5. เวลาและระยะเวลาผ่าตัด',
+      fields: [
+        ['surgery_start','เวลาเริ่มผ่าตัด'],['surgery_end','เวลาเสร็จผ่าตัด'],
+        ['surgery_duration_min','ระยะเวลาผ่าตัด'],['debridement_time_min','Debridement time'],
+        ['suture_time_min','Suture time']
+      ]
+    },
+    {
+      title: '6. Pulse',
+      fields: [
+        ['pre_manual_dp','Pre-op Manual DP'],['pre_manual_tp','Pre-op Manual TP'],
+        ['pre_digital_dp','Pre-op Digital DP'],['pre_digital_tp','Pre-op Digital TP'],
+        ['post_manual_dp','Post-op Manual DP'],['post_manual_tp','Post-op Manual TP'],
+        ['post_digital_dp','Post-op Digital DP'],['post_digital_tp','Post-op Digital TP']
+      ]
+    },
+    {
+      title: '7. รูปภาพ',
+      fields: []
+    }
+  ];
+
+  const valueFor = (key) => {
+    const v = rec?.[key];
+    if(v === null || v === undefined || v === '') return '—';
+    if(key === 'surgery_date' && typeof formatDate === 'function') return formatDate(v);
+    if(['tq_start','tq_end','surgery_start','surgery_end'].includes(key)) return String(v).slice(0,5);
+    if(['tq_duration_min','surgery_duration_min'].includes(key) && typeof formatDuration === 'function') return formatDuration(v);
+    return String(v);
+  };
+
+  body.innerHTML = groups.map((g, i) => `
+    <section class="patient-detail-group">
+      <div class="patient-detail-group-title">${g.title}</div>
+      ${g.fields.length ? `<div class="patient-detail-group-body">
+        ${g.fields.map(([key,label]) => `
+          <div class="patient-detail-item">
+            <div class="label">${label}</div>
+            <div class="value">${escapeHtml(valueFor(key))}</div>
+          </div>
+        `).join('')}
+      </div>` : `<div class="patient-detail-group-body" id="detail-images-group"></div>`}
+    </section>
+  `).join('');
+
+  // Reuse the existing image renderer if present.
+  if(typeof renderDetailImages === 'function') renderDetailImages(rec);
+}
+
 function showView(name){
   try{ localStorage.setItem('tka_last_view', name); }catch(e){}
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -1416,6 +1541,75 @@ async function openLightboxByPath(path){
   document.getElementById('lightbox').style.display = 'flex';
 }
 function closeLightbox(){ document.getElementById('lightbox').style.display = 'none'; }
+
+
+async function syncPostToGoogle(payload){
+  if(!GOOGLE_SHEETS_BACKUP_URL || !GOOGLE_SHEETS_BACKUP_SECRET) throw new Error('ยังไม่ได้ตั้งค่า Google Sheets Backup');
+  const res = await fetch(GOOGLE_SHEETS_BACKUP_URL + '?key=' + encodeURIComponent(GOOGLE_SHEETS_BACKUP_SECRET), {
+    method:'POST',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body: JSON.stringify(payload)
+  });
+  if(!res.ok) throw new Error('Google Apps Script HTTP ' + res.status);
+  return res;
+}
+
+async function syncAllToGoogleSheets(){
+  if(!currentUser){ showToast('กรุณา Login ก่อน', true); return; }
+  if(currentProfile?.role !== 'admin'){ showToast('เฉพาะ Admin เท่านั้น', true); return; }
+  if(!confirm('สำรองข้อมูลที่มีอยู่ทั้งหมดไป Google Sheets ตอนนี้ใช่หรือไม่?')) return;
+
+  const btn=document.getElementById('sync-google-btn');
+  if(btn){btn.disabled=true;btn.textContent='☁ กำลังสำรอง…';}
+  try{
+    let total=0;
+
+    const tables = [
+      ['records','*'],
+      ['profiles','*'],
+      ['record_images','*']
+    ];
+
+    for(const [table,select] of tables){
+      const {data,error}=await sb.from(table).select(select).limit(10000);
+      if(error) throw new Error(table+': '+error.message);
+      for(const row of (data||[])){
+        await syncPostToGoogle({
+          type:'INSERT',
+          table,
+          schema:'public',
+          record:row,
+          old_record:null
+        });
+        total++;
+      }
+    }
+
+    // Re-send existing image files as actual images.
+    const {data: images,error:imageErr}=await sb.from('record_images').select('*').limit(10000);
+    if(imageErr) throw new Error('record_images images: '+imageErr.message);
+
+    let imageCount=0;
+    for(const img of (images||[])){
+      const {data:signed,error:signedErr}=await sb.storage.from('tka-images').createSignedUrl(img.file_path,600);
+      if(signedErr || !signed?.signedUrl) continue;
+      await syncPostToGoogle({
+        kind:'image',
+        record:img,
+        image_url:signed.signedUrl,
+        filename:(img.file_path||'').split('/').pop() || ('image-'+Date.now()+'.jpg')
+      });
+      imageCount++;
+    }
+
+    showToast(`สำรองข้อมูลแล้ว ${total} รายการ + รูป ${imageCount} รูป`);
+  }catch(e){
+    console.error(e);
+    showToast('สำรองไม่สำเร็จ: '+e.message, true);
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='☁ สำรองไป Google Sheets';}
+  }
+}
 
 /* ---------------- CSV EXPORT ---------------- */
 async function exportCSV(){
