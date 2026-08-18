@@ -1442,7 +1442,7 @@ async function saveRecord(e){
         try{
           const { data: signed } = await sb.storage.from('tka-images').createSignedUrl(path, 600);
           if(signed?.signedUrl){
-            fetch(GOOGLE_SHEETS_BACKUP_URL + '?key=' + encodeURIComponent(GOOGLE_SHEETS_BACKUP_SECRET), {
+            const backupRes = await fetch(GOOGLE_SHEETS_BACKUP_URL + '?key=' + encodeURIComponent(GOOGLE_SHEETS_BACKUP_SECRET), {
               method: 'POST',
               headers: {'Content-Type':'text/plain;charset=utf-8'},
               body: JSON.stringify({
@@ -1459,7 +1459,12 @@ async function saveRecord(e){
                 image_url: signed.signedUrl,
                 filename: path.split('/').pop() || ('image-' + Date.now() + '.jpg')
               })
-            }).catch(()=>{});
+            });
+            const backupJson = await backupRes.json().catch(()=>({}));
+            if(!backupRes.ok || backupJson.ok === false){
+              console.warn('Google Sheets image backup failed:', backupJson);
+              showToast('บันทึกข้อมูลแล้ว แต่สำรองรูปไป Google Sheets ไม่สำเร็จ', true);
+            }
           }
         }catch(backupErr){
           console.warn('Google Sheets image backup skipped:', backupErr);
