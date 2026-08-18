@@ -718,16 +718,29 @@ async function handleAuthed(user){
   document.getElementById('app-shell').style.display = 'flex';
   document.getElementById('user-email').textContent = user.email;
 
-  const { data: profile, error } = await sb.from('profiles').select('*').eq('id', user.id).maybeSingle();
-  if(error){ showToast('โหลดข้อมูลผู้ใช้ไม่สำเร็จ: ' + error.message, true); }
+  let profile = await fetchProfile(user.id);
+  if(!profile){
+    // แก้ race condition: บางครั้ง trigger สร้างแถวใน profiles ยังไม่เสร็จ
+    // ตอนที่ session พร้อมแล้ว — รอสั้นๆ แล้วลองใหม่อีกครั้ง
+    await new Promise(res => setTimeout(res, 900));
+    profile = await fetchProfile(user.id);
+  }
   currentProfile = profile || { role: 'viewer' };
   applyRoleUI();
   showView('dashboard');
 }
 
+async function fetchProfile(userId){
+  const { data, error } = await sb.from('profiles').select('*').eq('id', userId).maybeSingle();
+  if(error){ showToast('โหลดข้อมูลผู้ใช้ไม่สำเร็จ: ' + error.message, true); return null; }
+  return data;
+}
+
 function applyRoleUI(){
-  const role = currentProfile?.role || 'viewer';
-  document.getElementById('user-role-badge').textContent = role;
+  // normalize กันเคส role เป็น 'Admin' / มีช่องว่างติดมา แล้วเทียบไม่ตรง
+  const rawRole = currentProfile?.role || 'viewer';
+  const role = String(rawRole).trim().toLowerCase();
+  document.getElementById('user-role-badge').textContent = rawRole;
   document.querySelectorAll('.role-gate').forEach(el => {
     el.style.display = (role === 'admin' || role === 'staff') ? '' : 'none';
   });
