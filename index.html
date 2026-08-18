@@ -431,12 +431,14 @@ tbody tr:last-child td{border-bottom:none;}
     </form>
 
     <form id="signup-form" style="display:none" onsubmit="return handleSignUp(event)">
-      <div class="field"><label>ชื่อ-สกุล</label><input type="text" id="su-name" required></div>
-      <div class="field"><label>Username (English)</label><input type="email" id="su-email" required autocomplete="username"></div>
+      <div class="field"><label>ชื่อ-สกุล</label><input type="text" id="su-name" required autocomplete="name"></div>
+      <div class="field"><label>Username (English)</label><input type="text" id="su-username" required autocomplete="username" pattern="[A-Za-z][A-Za-z0-9._-]{2,31}" placeholder="เช่น Udomsak01"></div>
+      <div class="field"><label>Email</label><input type="email" id="su-email" required autocomplete="email" placeholder="name@example.com"></div>
       <div class="field"><label>รหัสผ่าน (อย่างน้อย 6 ตัวอักษร)</label><input type="password" id="su-password" minlength="6" required autocomplete="new-password"></div>
       <button class="btn btn-primary" type="submit" id="su-btn">สมัครสมาชิก</button>
     </form>
     <p style="font-size:11.5px; color:var(--ink-soft); margin-top:14px; line-height:1.5;">
+      Username ใช้สำหรับเข้าสู่ระบบ ส่วน Email จะถูกผูกไว้กับบัญชีเพื่อยืนยันตัวตนและกู้คืนบัญชี<br>
       บัญชีที่สมัครใหม่จะเริ่มต้นด้วยสิทธิ์ <b>Viewer</b> (ดูอย่างเดียว) — ให้ผู้ดูแลระบบ (Admin)
       ปรับสิทธิ์ให้ในเมนู "ผู้ใช้งาน" หลังจากนั้น
     </p>
@@ -452,7 +454,7 @@ tbody tr:last-child td{border-bottom:none;}
           <path d="M6.5 3.2c1.5 0 2.7 1.2 2.7 2.7 0 .4-.1.8-.2 1.1l6.4 6.4c.3-.1.7-.2 1.1-.2 1.5 0 2.7 1.2 2.7 2.7s-1.2 2.7-2.7 2.7c-1.5 0-2.7-1.2-2.7-2.7 0-.4.1-.8.2-1.1L7.6 8.4c-.3.1-.7.2-1.1.2-1.5 0-2.7-1.2-2.7-2.7s1.2-2.7 2.7-2.7z" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
         </svg>
       </div>
-      <div class="titles"><b>TKA Registry</b><span>Total Knee Arthroplasty *SM HOSP* Develop by Udomsak Thoukaew</span></div>
+      <div class="titles"><b>TKA Registry</b><span>v2 · Total Knee Arthroplasty</span></div>
     </div>
     <div class="nav-tabs">
       <button data-view="dashboard" class="active" onclick="showView('dashboard')">แดชบอร์ด</button>
@@ -722,7 +724,11 @@ create unique index if not exists profiles_username_unique
    ⚙️  ตั้งค่าการเชื่อมต่อ Supabase ตรงนี้
    ============================================================ */
 const SUPABASE_URL = "https://vpxzjpxbubcejovsdyvc.supabase.co";
+
+const GOOGLE_SHEETS_BACKUP_URL = ''; // ใส่ Web App URL ของ Google Apps Script
+const GOOGLE_SHEETS_BACKUP_SECRET = ''; // ต้องตรงกับ WEBHOOK_SECRET ใน Apps Script
 const SUPABASE_ANON_KEY = "sb_publishable_U56PTBiQx88lMor14Mzh7Q_l0_RQju9";
+// Google Sheets backup is handled server-side by Supabase Database Webhooks; no patient data is sent directly from the browser.
 /* ============================================================ */
 
 const IMAGE_TYPES = ['Pre-op','Intra-op','Post-op','X-ray','อื่นๆ'];
@@ -809,11 +815,25 @@ async function handleSignIn(e){
   e.preventDefault();
   document.getElementById('auth-error').textContent = '';
   const btn = document.getElementById('si-btn'); btn.disabled = true; btn.textContent = 'กำลังเข้าสู่ระบบ…';
-  const email = document.getElementById('si-email').value.trim();
+  const username = document.getElementById('si-email').value.trim();
   const password = document.getElementById('si-password').value;
-  const { error } = await sb.auth.signInWithPassword({ email, password });
+  const usernameRegex = /^[A-Za-z][A-Za-z0-9._-]{2,31}$/;
+  if(!usernameRegex.test(username)){
+    document.getElementById('auth-error').textContent = 'Username ต้องเป็นภาษาอังกฤษเท่านั้น และยาว 3–32 ตัวอักษร';
+    btn.disabled = false; btn.textContent = 'เข้าสู่ระบบ';
+    return false;
+  }
+
+  const { data: emailData, error: lookupError } = await sb.rpc('lookup_login_email', { p_username: username });
+  if(lookupError || !emailData){
+    document.getElementById('auth-error').textContent = 'Username หรือรหัสผ่านไม่ถูกต้อง';
+    btn.disabled = false; btn.textContent = 'เข้าสู่ระบบ';
+    return false;
+  }
+
+  const { error } = await sb.auth.signInWithPassword({ email: emailData, password });
   btn.disabled = false; btn.textContent = 'เข้าสู่ระบบ';
-  if(error){ document.getElementById('auth-error').textContent = translateAuthError(error.message); }
+  if(error){ document.getElementById('auth-error').textContent = 'Username หรือรหัสผ่านไม่ถูกต้อง'; }
   return false;
 }
 
@@ -823,25 +843,53 @@ async function handleSignUp(e){
   document.getElementById('auth-msg').textContent = '';
   const btn = document.getElementById('su-btn'); btn.disabled = true; btn.textContent = 'กำลังสมัคร…';
   const full_name = document.getElementById('su-name').value.trim();
+  const username = document.getElementById('su-username').value.trim();
   const email = document.getElementById('su-email').value.trim();
   const password = document.getElementById('su-password').value;
-  const { data, error } = await sb.auth.signUp({ email, password, options: { data: { full_name } } });
-    if(!error && data?.user){
-      const { error: profileError } = await sb.from('profiles').upsert({
-        id: data.user.id,
-        email: email,
-        username: username
-      }, { onConflict: 'id' });
-      if(profileError){
-        showToast('สร้างบัญชีสำเร็จ แต่บันทึก Username ไม่สำเร็จ: ' + profileError.message, true);
-        return false;
-      }
+  const usernameRegex = /^[A-Za-z][A-Za-z0-9._-]{2,31}$/;
+
+  if(!usernameRegex.test(username)){
+    document.getElementById('auth-error').textContent = 'Username ต้องเป็นภาษาอังกฤษเท่านั้น และยาว 3–32 ตัวอักษร';
+    btn.disabled = false; btn.textContent = 'สมัครสมาชิก';
+    return false;
+  }
+
+  const { data: usernameExists, error: usernameCheckError } = await sb.rpc('username_exists', { p_username: username });
+  if(usernameCheckError){
+    document.getElementById('auth-error').textContent = 'ตรวจสอบ Username ไม่สำเร็จ: ' + usernameCheckError.message;
+    btn.disabled = false; btn.textContent = 'สมัครสมาชิก';
+    return false;
+  }
+  if(usernameExists){
+    document.getElementById('auth-error').textContent = 'Username นี้ถูกใช้แล้ว';
+    btn.disabled = false; btn.textContent = 'สมัครสมาชิก';
+    return false;
+  }
+
+  const { data, error } = await sb.auth.signUp({ email, password, options: { data: { full_name, username } } });
+  if(error){
+    btn.disabled = false; btn.textContent = 'สมัครสมาชิก';
+    document.getElementById('auth-error').textContent = translateAuthError(error.message);
+    return false;
+  }
+
+  if(data?.user){
+    const { error: profileError } = await sb.from('profiles').upsert({
+      id: data.user.id,
+      email: email,
+      username: username,
+      full_name: full_name
+    }, { onConflict: 'id' });
+    if(profileError){
+      btn.disabled = false; btn.textContent = 'สมัครสมาชิก';
+      document.getElementById('auth-error').textContent = 'สร้างบัญชีแล้ว แต่บันทึก Username ไม่สำเร็จ: ' + profileError.message;
+      return false;
     }
+  }
 
   btn.disabled = false; btn.textContent = 'สมัครสมาชิก';
-  if(error){ document.getElementById('auth-error').textContent = translateAuthError(error.message); return false; }
   if(data.session){
-    // อีเมลยืนยันอัตโนมัติ (ปิด confirm email ไว้) -> เข้าระบบได้เลย
+    document.getElementById('auth-msg').textContent = 'สมัครสมาชิกสำเร็จ';
   } else {
     document.getElementById('auth-msg').textContent = 'สมัครสำเร็จ — กรุณายืนยันอีเมลก่อนเข้าสู่ระบบ (ถ้าตั้งค่า Supabase ให้ต้องยืนยัน)';
   }
@@ -849,7 +897,7 @@ async function handleSignUp(e){
 }
 
 function translateAuthError(msg){
-  if(/invalid login credentials/i.test(msg)) return 'อีเมลหรือรหัสผ่านไม่ถูกต้อง';
+  if(/invalid login credentials/i.test(msg)) return 'Username หรือรหัสผ่านไม่ถูกต้อง';
   if(/already registered/i.test(msg)) return 'อีเมลนี้ถูกใช้สมัครแล้ว';
   if(/password/i.test(msg)) return 'รหัสผ่านไม่ถูกต้องตามเงื่อนไข (อย่างน้อย 6 ตัวอักษร)';
   return msg;
@@ -872,7 +920,8 @@ async function handleAuthed(user){
   document.getElementById('app-shell').style.display = 'flex';
   document.getElementById('user-email').textContent = user.email;
   await loadProfileWithRetry();
-  showView('dashboard');
+  const last = localStorage.getItem('tka_last_view');
+  if(['list','form','detail'].includes(last)) showView(last); else showView('dashboard');
 }
 
 async function loadProfileWithRetry(){
@@ -1182,8 +1231,17 @@ function cssEscape(s){ return String(s).replace(/["\\]/g,'\\$&'); }
 async function deleteExistingImage(imageId, filePath){
   if(!confirm('ลบรูปนี้ใช่หรือไม่?')) return;
   await sb.storage.from('tka-images').remove([filePath]);
+  const { data: imageBefore } = await sb.from('record_images').select('*').eq('id', imageId).maybeSingle();
   const { error } = await sb.from('record_images').delete().eq('id', imageId);
   if(error){ showToast('ลบรูปไม่สำเร็จ: ' + error.message, true); return; }
+
+  if(GOOGLE_SHEETS_BACKUP_URL && GOOGLE_SHEETS_BACKUP_SECRET && imageBefore){
+    fetch(GOOGLE_SHEETS_BACKUP_URL + '?key=' + encodeURIComponent(GOOGLE_SHEETS_BACKUP_SECRET), {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({kind:'image_delete', record:{id:imageBefore.id}})
+    }).catch(()=>{});
+  }
   document.querySelector(`[data-image-id="${imageId}"]`)?.remove();
   showToast('ลบรูปแล้ว');
 }
@@ -1248,10 +1306,40 @@ async function saveRecord(e){
       const path = `records/${recordId}/${crypto.randomUUID()}.${ext}`;
       const { error: upErr } = await sb.storage.from('tka-images').upload(path, item.file, { upsert: false });
       if(upErr) throw upErr;
-      const { error: insErr } = await sb.from('record_images').insert({
+      const { data: imageRow, error: insErr } = await sb.from('record_images').insert({
         record_id: recordId, file_path: path, image_type: item.type, description: item.description || null, uploaded_by: currentUser.id
-      });
+      }).select('*').single();
       if(insErr) throw insErr;
+
+      // สำรอง "ไฟล์รูปจริง" ไป Google Sheets หลังอัปโหลด Supabase สำเร็จ
+      // ใช้ signed URL ชั่วคราวเพื่อให้ Google Apps Script ดึงไฟล์ private ได้
+      if(GOOGLE_SHEETS_BACKUP_URL && GOOGLE_SHEETS_BACKUP_SECRET){
+        try{
+          const { data: signed } = await sb.storage.from('tka-images').createSignedUrl(path, 600);
+          if(signed?.signedUrl){
+            fetch(GOOGLE_SHEETS_BACKUP_URL + '?key=' + encodeURIComponent(GOOGLE_SHEETS_BACKUP_SECRET), {
+              method: 'POST',
+              headers: {'Content-Type':'text/plain;charset=utf-8'},
+              body: JSON.stringify({
+                kind: 'image',
+                record: {
+                  id: imageRow?.id || null,
+                  record_id: recordId,
+                  file_path: path,
+                  image_type: item.type,
+                  description: item.description || null,
+                  uploaded_by: currentUser.id,
+                  created_at: imageRow?.created_at || new Date().toISOString()
+                },
+                image_url: signed.signedUrl,
+                filename: path.split('/').pop() || ('image-' + Date.now() + '.jpg')
+              })
+            }).catch(()=>{});
+          }
+        }catch(backupErr){
+          console.warn('Google Sheets image backup skipped:', backupErr);
+        }
+      }
     }
 
     showToast('บันทึกข้อมูลเรียบร้อย');
