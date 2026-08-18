@@ -425,7 +425,7 @@ tbody tr:last-child td{border-bottom:none;}
     <div id="auth-msg"></div>
 
     <form id="signin-form" onsubmit="return handleSignIn(event)">
-      <div class="field"><label>Email หรือ Username</label><input type="text" id="si-email" required autocomplete="username" placeholder="Email เดิม หรือ Username"></div>
+      <div class="field"><label>Username</label><input type="text" id="si-email" required autocomplete="username"></div>
       <div class="field"><label>รหัสผ่าน</label><input type="password" id="si-password" required autocomplete="current-password"></div>
       <button class="btn btn-primary" type="submit" id="si-btn">เข้าสู่ระบบ</button>
     </form>
@@ -815,31 +815,23 @@ async function handleSignIn(e){
   e.preventDefault();
   document.getElementById('auth-error').textContent = '';
   const btn = document.getElementById('si-btn'); btn.disabled = true; btn.textContent = 'กำลังเข้าสู่ระบบ…';
-  const loginValue = document.getElementById('si-email').value.trim();
+  const username = document.getElementById('si-email').value.trim();
   const password = document.getElementById('si-password').value;
-
-  // รองรับทั้งบัญชีเดิมที่ Login ด้วย Email และบัญชีใหม่ที่ Login ด้วย Username
-  let loginEmail = loginValue;
-
-  if(!loginValue.includes('@')){
-    const usernameRegex = /^[A-Za-z][A-Za-z0-9._-]{2,31}$/;
-    if(!usernameRegex.test(loginValue)){
-      document.getElementById('auth-error').textContent = 'กรุณากรอก Email เดิม หรือ Username ภาษาอังกฤษ';
-      btn.disabled = false; btn.textContent = 'เข้าสู่ระบบ';
-      return false;
-    }
-
-    // Username login ต้องมี RPC lookup_login_email ใน Supabase
-    const { data: emailData, error: lookupError } = await sb.rpc('lookup_login_email', { p_username: loginValue });
-    if(lookupError || !emailData){
-      document.getElementById('auth-error').textContent = 'ไม่พบ Username นี้ หรือยังไม่ได้ตั้งค่า Username Login';
-      btn.disabled = false; btn.textContent = 'เข้าสู่ระบบ';
-      return false;
-    }
-    loginEmail = emailData;
+  const usernameRegex = /^[A-Za-z][A-Za-z0-9._-]{2,31}$/;
+  if(!usernameRegex.test(username)){
+    document.getElementById('auth-error').textContent = 'Username ต้องเป็นภาษาอังกฤษเท่านั้น และยาว 3–32 ตัวอักษร';
+    btn.disabled = false; btn.textContent = 'เข้าสู่ระบบ';
+    return false;
   }
 
-  const { error } = await sb.auth.signInWithPassword({ email: loginEmail, password });
+  const { data: emailData, error: lookupError } = await sb.rpc('lookup_login_email', { p_username: username });
+  if(lookupError || !emailData){
+    document.getElementById('auth-error').textContent = 'Username หรือรหัสผ่านไม่ถูกต้อง';
+    btn.disabled = false; btn.textContent = 'เข้าสู่ระบบ';
+    return false;
+  }
+
+  const { error } = await sb.auth.signInWithPassword({ email: emailData, password });
   btn.disabled = false; btn.textContent = 'เข้าสู่ระบบ';
   if(error){ document.getElementById('auth-error').textContent = 'Username หรือรหัสผ่านไม่ถูกต้อง'; }
   return false;
@@ -884,7 +876,7 @@ async function handleSignUp(e){
   if(data?.user){
     const { error: profileError } = await sb.from('profiles').upsert({
       id: data.user.id,
-      email: email,
+      email: profileEmail,
       username: username,
       full_name: full_name
     }, { onConflict: 'id' });
