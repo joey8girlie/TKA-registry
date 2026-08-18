@@ -386,6 +386,17 @@ tbody tr:last-child td{border-bottom:none;}
   tbody#list-tbody td[data-label=""]{padding-top:2px;}
   tbody#list-tbody .row-actions{justify-content:flex-end; padding-top:8px; border-top:1px solid var(--line-soft); margin-top:2px;}
 }
+
+.detail-section{margin:0 0 18px;padding:0 0 14px;border-bottom:1px solid var(--line,#e5e7eb)}
+.detail-section:last-child{border-bottom:0;margin-bottom:0}
+.detail-section h3{margin:0 0 10px;font-size:15px;font-weight:700}
+.detail-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.detail-item{padding:9px 11px;background:var(--surface-2,#f7f7f8);border-radius:8px}
+.detail-label{font-size:11px;color:var(--ink-faint,#6b7280);margin-bottom:3px}
+.detail-value{font-size:14px;font-weight:600;word-break:break-word}
+@media(max-width:800px){.detail-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:520px){.detail-grid{grid-template-columns:1fr}}
+
 </style>
 </head>
 <body>
@@ -597,7 +608,7 @@ tbody tr:last-child td{border-bottom:none;}
         <div class="form-section">
           <h3><span class="n">5</span> Alignment</h3>
           <div class="grid grid-3">
-            <div class="field"><label>Extension lag (°)</label><input type="number" step="0.1" id="rf-extension_lag_deg"></div>
+            <div class="field"><label>Extension lat (°)</label><input type="number" step="0.1" id="rf-extension_lag_deg"></div>
             <div class="field"><label>Varus (°)</label><input type="number" step="0.1" id="rf-varus_deg"></div>
             <div class="field"><label>Valgus (°)</label><input type="number" step="0.1" id="rf-valgus_deg"></div>
           </div>
@@ -728,6 +739,17 @@ window.addEventListener('DOMContentLoaded', () => {
     else { showAuthScreen(); }
   });
 });
+
+
+function restoreLastView(){
+  try{
+    const last = localStorage.getItem('tka_last_view');
+    const allowed = ['list','form','detail'];
+    if(allowed.includes(last) && currentUser){
+      showView(last);
+    }
+  }catch(e){}
+}
 
 /* ---------------- AUTH ---------------- */
 function switchAuthTab(tab){
@@ -863,12 +885,14 @@ function applyRoleUI(){
 
 /* ---------------- NAV ---------------- */
 function showView(name){
+  try{ localStorage.setItem('tka_last_view', name); }catch(e){}
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-' + name).classList.add('active');
   document.querySelectorAll('.nav-tabs button, #bottom-nav button').forEach(b => b.classList.toggle('active', b.dataset.view === name));
   window.scrollTo(0,0);
   if(name === 'dashboard') loadDashboard();
   if(name === 'list') loadList();
+    restoreLastView();
   if(name === 'users') loadUsers();
 }
 
@@ -1009,6 +1033,22 @@ function getPatientFullName(record){
     .map(v => (v ?? '').toString().trim())
     .filter(Boolean);
   return parts.join(' ') || record.full_name || record.hn || '-';
+}
+
+function formatClockTime(v){
+  if(!v) return '—';
+  const s = String(v).slice(0,5);
+  return /^\d{2}:\d{2}$/.test(s) ? s : String(v);
+}
+
+function formatDetailValue(key, value){
+  if(value === null || value === undefined || value === '') return '—';
+  if(key === 'surgery_date') return formatDate(value);
+  if(key === 'tq_start' || key === 'tq_end' || key === 'surgery_start' || key === 'surgery_end') return formatClockTime(value);
+  if(key === 'tq_duration_min' || key === 'surgery_duration_min') return formatDuration(value);
+  if(key === 'extension_lag_deg' || key === 'varus_deg' || key === 'valgus_deg') return `${value} °`;
+  if(key === 'debridement_time_min' || key === 'suture_time_min') return `${value} นาที`;
+  return String(value);
 }
 function updateDurationPreview(which){
   if(which === 'tq'){
@@ -1175,7 +1215,7 @@ const DETAIL_LABELS = {
   procedure:'Procedure', surgery_date:'วันที่ผ่าตัด',
   hct:'Hct', hb:'Hb', egfr:'eGFR', cr:'Cr', alb:'Alb', hba1c:'HbA1C',
   tq_mmhg:'TQ (mmHg)', tq_start:'TQ Start', tq_end:'TQ End', tq_duration_min:'TQ Duration',
-  extension_lag_deg:'Extension lag (°)', varus_deg:'Varus (°)', valgus_deg:'Valgus (°)',
+  extension_lag_deg:'Extension lat (°)', varus_deg:'Varus (°)', valgus_deg:'Valgus (°)',
   surgery_start:'เวลาเริ่มผ่าตัด', surgery_end:'เวลาเสร็จผ่าตัด', surgery_duration_min:'ระยะเวลาผ่าตัด',
   debridement_time_min:'Debridement time (นาที)', suture_time_min:'Suture time (นาที)',
   pre_manual_dp:'Pre-op Manual DP', pre_manual_tp:'Pre-op Manual TP', pre_digital_dp:'Pre-op Digital DP', pre_digital_tp:'Pre-op Digital TP',
@@ -1294,3 +1334,14 @@ async function updateUserRole(userId, role){
 </script>
 </body>
 </html>
+
+<script>
+document.addEventListener('visibilitychange', () => {
+  if(!document.hidden){
+    try{
+      const last = localStorage.getItem('tka_last_view');
+      if(last && ['list','form','detail'].includes(last) && currentUser) showView(last);
+    }catch(e){}
+  }
+});
+</script>
