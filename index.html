@@ -289,7 +289,7 @@ tbody tr:last-child td{border-bottom:none;}
 .loading{display:flex; align-items:center; gap:9px; color:var(--ink-soft); font-size:13.5px; padding:20px;}
 .spinner{width:16px;height:16px;border-radius:50%; border:2px solid var(--line); border-top-color:var(--primary); animation:spin .7s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
-.role-gate{display:none;}
+.role-gate.gate-hidden, .admin-gate.gate-hidden{display:none !important;}
 .badge-role{font-size:10.5px; font-weight:700; padding:3px 8px; border-radius:12px; text-transform:capitalize;}
 .badge-admin{background:var(--danger-soft); color:var(--danger);}
 .badge-staff{background:var(--primary-glow); color:var(--primary);}
@@ -446,7 +446,7 @@ tbody tr:last-child td{border-bottom:none;}
     <div class="nav-tabs">
       <button data-view="dashboard" class="active" onclick="showView('dashboard')">แดชบอร์ด</button>
       <button data-view="list" onclick="showView('list')">รายการผู้ป่วย</button>
-      <button data-view="form" id="nav-add-btn" class="role-gate" onclick="openForm(null)">+ เพิ่มข้อมูล</button>
+      <button data-view="form" id="nav-add-btn" class="role-gate gate-hidden" onclick="openForm(null)">+ เพิ่มข้อมูล</button>
       <button data-view="users" id="nav-users-btn" class="hidden" onclick="showView('users')">ผู้ใช้งาน</button>
     </div>
     <div class="user-chip">
@@ -472,7 +472,7 @@ tbody tr:last-child td{border-bottom:none;}
     <button data-view="list" onclick="showView('list')">
       <span class="bn-ico">☰</span><span>รายการ</span>
     </button>
-    <button data-view="form" id="bn-add-btn" class="role-gate" onclick="openForm(null)">
+    <button data-view="form" id="bn-add-btn" class="role-gate gate-hidden" onclick="openForm(null)">
       <span class="bn-ico">＋</span><span>เพิ่ม</span>
     </button>
     <button data-view="users" id="bn-users-btn" class="hidden" onclick="showView('users')">
@@ -500,7 +500,7 @@ tbody tr:last-child td{border-bottom:none;}
         <div><h1>รายการผู้ป่วย</h1><p>ค้นหาและจัดการข้อมูลผู้ป่วยทั้งหมด</p></div>
         <div style="display:flex; gap:8px;">
           <button class="btn" onclick="exportCSV()">⬇ Export CSV</button>
-          <button class="btn btn-accent role-gate" onclick="openForm(null)">+ เพิ่มข้อมูล</button>
+          <button class="btn btn-accent role-gate gate-hidden" onclick="openForm(null)">+ เพิ่มข้อมูล</button>
         </div>
       </div>
       <div class="card card-pad" style="margin-bottom:16px;">
@@ -650,8 +650,8 @@ tbody tr:last-child td{border-bottom:none;}
         <div><h1 id="detail-title">รายละเอียดผู้ป่วย</h1><p id="detail-sub"></p></div>
         <div style="display:flex; gap:8px;">
           <button class="btn" onclick="window.print()">🖨 พิมพ์</button>
-          <button class="btn btn-accent role-gate" id="detail-edit-btn">✎ แก้ไข</button>
-          <button class="btn btn-danger admin-gate" id="detail-delete-btn">🗑 ลบ</button>
+          <button class="btn btn-accent role-gate gate-hidden" id="detail-edit-btn">✎ แก้ไข</button>
+          <button class="btn btn-danger admin-gate gate-hidden" id="detail-delete-btn">🗑 ลบ</button>
         </div>
       </div>
       <div class="card card-pad" id="detail-body"></div>
@@ -839,10 +839,10 @@ function applyRoleUI(){
   const role = rawRole ? String(rawRole).trim().toLowerCase() : null;
   document.getElementById('user-role-badge').textContent = rawRole || '?';
   document.querySelectorAll('.role-gate').forEach(el => {
-    el.style.display = (role === 'admin' || role === 'staff') ? '' : 'none';
+    el.classList.toggle('gate-hidden', !(role === 'admin' || role === 'staff'));
   });
   document.querySelectorAll('.admin-gate').forEach(el => {
-    el.style.display = (role === 'admin') ? '' : 'none';
+    el.classList.toggle('gate-hidden', role !== 'admin');
   });
   document.getElementById('nav-users-btn').classList.toggle('hidden', role !== 'admin');
   document.getElementById('bn-users-btn').classList.toggle('hidden', role !== 'admin');
@@ -1026,7 +1026,7 @@ function renderExistingImages(images){
       <div class="meta">
         <div style="font-size:11px; color:var(--ink-soft); margin-bottom:4px;">${escapeHtml(img.image_type||'อื่นๆ')}</div>
         <div style="font-size:11px; color:var(--ink-faint);">${escapeHtml(img.description||'')}</div>
-        <button type="button" class="btn btn-sm btn-danger rm admin-gate" onclick="deleteExistingImage('${img.id}','${img.file_path}')">ลบรูปนี้</button>
+        <button type="button" class="btn btn-sm btn-danger rm admin-gate gate-hidden" onclick="deleteExistingImage('${img.id}','${img.file_path}')">ลบรูปนี้</button>
       </div>
     </div>
   `).join('');
