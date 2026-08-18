@@ -542,7 +542,18 @@ tbody tr:last-child td{border-bottom:none;}
           <h3><span class="n">1</span> ข้อมูลผู้ป่วย</h3>
           <div class="grid grid-4">
             <div class="field"><label>HN *</label><input type="text" id="rf-hn" required></div>
-            <div class="field" style="grid-column:span 2;"><label>ชื่อ-สกุล</label><input type="text" id="rf-full_name"></div>
+            <div class="field"><label>คำนำหน้า</label>
+              <select id="rf-name_prefix">
+                <option value="">-</option>
+                <option>นาย</option>
+                <option>นาง</option>
+                <option>นางสาว</option>
+                <option>เด็กชาย</option>
+                <option>เด็กหญิง</option>
+              </select>
+            </div>
+            <div class="field"><label>ชื่อ</label><input type="text" id="rf-first_name"></div>
+            <div class="field"><label>นามสกุล</label><input type="text" id="rf-last_name"></div>
             <div class="field"><label>เพศ</label><select id="rf-gender"><option value="">-</option><option>ชาย</option><option>หญิง</option></select></div>
             <div class="field"><label>อายุ (ปี)</label><input type="number" id="rf-age" min="0" max="150"></div>
             <div class="field"><label>น้ำหนัก (กก.)</label><input type="number" step="0.1" id="rf-weight_kg" oninput="updateBMIPreview()"></div>
@@ -689,7 +700,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_U56PTBiQx88lMor14Mzh7Q_l0_RQju9";
 
 const IMAGE_TYPES = ['Pre-op','Intra-op','Post-op','X-ray','อื่นๆ'];
 const PULSE_FIELDS = ['pre_manual_dp','pre_manual_tp','pre_digital_dp','pre_digital_tp','post_manual_dp','post_manual_tp','post_digital_dp','post_digital_tp'];
-const FORM_FIELDS = ['hn','full_name','gender','age','weight_kg','height_cm','procedure','surgery_date',
+const FORM_FIELDS = ['hn','name_prefix','first_name','last_name','gender','age','weight_kg','height_cm','procedure','surgery_date',
   'hct','hb','egfr','cr','alb','hba1c','tq_mmhg','tq_start','tq_end',
   'extension_lag_deg','varus_deg','valgus_deg','surgery_start','surgery_end',
   'debridement_time_min','suture_time_min', ...PULSE_FIELDS];
@@ -917,8 +928,8 @@ function buildListQuery(){
   const proc = document.getElementById('f-procedure').value;
   const from = document.getElementById('f-date-from').value;
   const to = document.getElementById('f-date-to').value;
-  let q = sb.from('records').select('id,hn,full_name,procedure,surgery_date,bmi,record_images(count)', { count: 'exact' });
-  if(search) q = q.or(`hn.ilike.%${search}%,full_name.ilike.%${search}%`);
+  let q = sb.from('records').select('id,hn,name_prefix,first_name,last_name,full_name,procedure,surgery_date,bmi,record_images(count)', { count: 'exact' });
+  if(search) q = q.or(`hn.ilike.%${search}%,name_prefix.ilike.%${search}%,first_name.ilike.%${search}%,last_name.ilike.%${search}%,full_name.ilike.%${search}%`);
   if(proc) q = q.eq('procedure', proc);
   if(from) q = q.gte('surgery_date', from);
   if(to) q = q.lte('surgery_date', to);
@@ -934,7 +945,7 @@ async function loadList(){
   tbody.innerHTML = data.map(r => `
     <tr onclick="viewDetail('${r.id}')" style="cursor:pointer">
       <td class="hn-cell" data-label="HN">${escapeHtml(r.hn||'-')}</td>
-      <td data-label="ชื่อ-สกุล">${escapeHtml(r.full_name||'-')}</td>
+      <td data-label="ชื่อ-สกุล">${escapeHtml(getPatientFullName(r))}</td>
       <td data-label="Procedure">${procedureTag(r.procedure)}</td>
       <td data-label="วันที่ผ่าตัด">${formatDate(r.surgery_date)}</td>
       <td class="mono" data-label="BMI">${r.bmi ?? '—'}</td>
@@ -988,11 +999,16 @@ function maskTimeInput(el){
 function formatDuration(mins){
   if(mins === null || mins === undefined || mins === '') return '—';
   const m = Math.round(Number(mins));
-  if(isNaN(m)) return '—';
+  if(isNaN(m) || m < 0) return '—';
   const h = Math.floor(m/60), r = m%60;
-  if(h === 0) return `${r} นาที`;
-  if(r === 0) return `${h} ชม.`;
-  return `${h} ชม. ${r} นาที`;
+  return `${String(h).padStart(2,'0')}:${String(r).padStart(2,'0')} ชม.`;
+}
+
+function getPatientFullName(record){
+  const parts = [record.name_prefix, record.first_name, record.last_name]
+    .map(v => (v ?? '').toString().trim())
+    .filter(Boolean);
+  return parts.join(' ') || record.full_name || record.hn || '-';
 }
 function updateDurationPreview(which){
   if(which === 'tq'){
@@ -1116,6 +1132,9 @@ async function saveRecord(e){
     });
     if(!payload.hn){ throw new Error('กรุณากรอก HN'); }
 
+    // เก็บ full_name เดิมไว้เพื่อความเข้ากันได้กับข้อมูลเก่า/รายงานเดิม
+    payload.full_name = getPatientFullName(payload);
+
     let recordId = editingId;
     if(editingId){
       payload.updated_by = currentUser.id;
@@ -1152,7 +1171,7 @@ async function saveRecord(e){
 
 /* ---------------- DETAIL ---------------- */
 const DETAIL_LABELS = {
-  hn:'HN', full_name:'ชื่อ-สกุล', gender:'เพศ', age:'อายุ', weight_kg:'น้ำหนัก (กก.)', height_cm:'ส่วนสูง (ซม.)', bmi:'BMI',
+  hn:'HN', name_prefix:'คำนำหน้า', first_name:'ชื่อ', last_name:'นามสกุล', gender:'เพศ', age:'อายุ', weight_kg:'น้ำหนัก (กก.)', height_cm:'ส่วนสูง (ซม.)', bmi:'BMI',
   procedure:'Procedure', surgery_date:'วันที่ผ่าตัด',
   hct:'Hct', hb:'Hb', egfr:'eGFR', cr:'Cr', alb:'Alb', hba1c:'HbA1C',
   tq_mmhg:'TQ (mmHg)', tq_start:'TQ Start', tq_end:'TQ End', tq_duration_min:'TQ Duration',
@@ -1170,7 +1189,7 @@ async function viewDetail(id){
   const { data: rec, error } = await sb.from('records').select('*').eq('id', id).single();
   if(error){ document.getElementById('detail-body').innerHTML = `<div class="empty-note">โหลดข้อมูลไม่สำเร็จ: ${error.message}</div>`; return; }
 
-  document.getElementById('detail-title').textContent = rec.full_name || rec.hn;
+  document.getElementById('detail-title').textContent = getPatientFullName(rec);
   document.getElementById('detail-sub').textContent = `HN ${rec.hn} · ${rec.procedure||'-'} · ${formatDate(rec.surgery_date)}`;
   document.getElementById('detail-body').innerHTML = `<div class="detail-grid">` +
     Object.entries(DETAIL_LABELS).map(([k,label]) => `
@@ -1224,7 +1243,7 @@ async function exportCSV(){
   const { data: full, error: e2 } = await sb.from('records').select('*').in('id', data.map(r=>r.id));
   if(e2){ showToast('Export ไม่สำเร็จ: ' + e2.message, true); return; }
 
-  const cols = ['hn','full_name','gender','age','weight_kg','height_cm','bmi','procedure','surgery_date',
+  const cols = ['hn','name_prefix','first_name','last_name','full_name','gender','age','weight_kg','height_cm','bmi','procedure','surgery_date',
     'hct','hb','egfr','cr','alb','hba1c','tq_mmhg','tq_start','tq_end','tq_duration_min',
     'extension_lag_deg','varus_deg','valgus_deg','surgery_start','surgery_end','surgery_duration_min',
     'debridement_time_min','suture_time_min', ...PULSE_FIELDS];
