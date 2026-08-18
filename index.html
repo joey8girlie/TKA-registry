@@ -296,11 +296,37 @@ tbody tr:last-child td{border-bottom:none;}
 .badge-viewer{background:var(--surface-2); color:var(--ink-soft);}
 
 @media print{
-  #app-shell > .topbar, #config-warning, main > .view > .page-head .btn, .no-print{display:none !important;}
+  #app-shell > .topbar, #config-warning, main > .view > .page-head .btn, .no-print, #bottom-nav{display:none !important;}
   main{max-width:100%; padding:0;}
   body{background:#fff;}
   .card{box-shadow:none; border:none;}
 }
+
+/* ---------- role status banners ---------- */
+#role-loading-banner, #role-error-banner{
+  display:flex; align-items:center; justify-content:center; gap:10px;
+  font-size:13px; padding:9px 14px; background:var(--surface-2); color:var(--ink-soft);
+  border-bottom:1px solid var(--line);
+}
+#role-error-banner{background:var(--danger-soft); color:var(--danger);}
+#claim-admin-btn.role-gate-inverse{background:var(--accent); color:#241a06; border:none; border-radius:16px; padding:6px 11px; font-size:12px; font-weight:700; cursor:pointer;}
+
+/* ---------- bottom nav (mobile only) ---------- */
+#bottom-nav{
+  display:none;
+  position:fixed; left:0; right:0; bottom:0; z-index:50;
+  background:var(--primary); box-shadow:0 -2px 12px rgba(0,0,0,.15);
+  padding:4px 4px calc(4px + env(safe-area-inset-bottom));
+  gap:2px;
+}
+#bottom-nav button{
+  flex:1; display:flex; flex-direction:column; align-items:center; gap:2px;
+  background:transparent; border:none; color:#BFE0D9; padding:7px 2px 6px; border-radius:9px;
+  font-size:10.5px; cursor:pointer;
+}
+#bottom-nav button .bn-ico{font-size:18px; line-height:1;}
+#bottom-nav button.active{background:rgba(255,255,255,.14); color:#fff;}
+#bottom-nav button.hidden{display:none;}
 
 /* ============================================================
    MOBILE
@@ -313,17 +339,12 @@ tbody tr:last-child td{border-bottom:none;}
   }
   .topbar .brand{order:1; margin-right:0;}
   .brand .titles span{display:none;} /* hide subtitle, keep it compact */
+  .topbar .nav-tabs{display:none;} /* replaced by bottom nav on mobile */
   .topbar .user-chip{order:2; margin-left:auto;}
   .user-chip span#user-email{display:none;} /* email hidden on mobile, role badge still shows */
-  .nav-tabs{
-    order:3;
-    width:100%;
-    justify-content:flex-start;
-    border-top:1px solid rgba(255,255,255,.12);
-    padding-top:6px;
-    margin-top:2px;
-  }
-  .nav-tabs button{padding:8px 11px; font-size:13px;}
+
+  #bottom-nav{display:flex;}
+  #app-shell{padding-bottom:64px;} /* room for bottom nav */
 
   main{padding:14px 10px 48px;}
   .page-head{flex-direction:column; align-items:stretch;}
@@ -344,6 +365,26 @@ tbody tr:last-child td{border-bottom:none;}
   .auth-card{padding:24px 18px 22px;}
 
   .row-actions{flex-wrap:wrap;}
+
+  /* ---- list table -> stacked cards ---- */
+  .table-wrap{border:none; background:transparent; overflow:visible;}
+  table{min-width:0;}
+  thead{display:none;}
+  tbody, tr, td{display:block; width:100%;}
+  tbody#list-tbody tr{
+    background:var(--surface); border:1px solid var(--line-soft); border-radius:var(--radius);
+    box-shadow:var(--shadow); margin-bottom:10px; padding:4px 2px;
+  }
+  tbody#list-tbody tr:hover{background:var(--surface);}
+  tbody#list-tbody td{
+    border-bottom:none; padding:6px 12px; display:flex; justify-content:space-between; align-items:center; gap:10px;
+  }
+  tbody#list-tbody td::before{
+    content:attr(data-label); font-size:11px; font-weight:600; color:var(--ink-faint); flex:none;
+  }
+  tbody#list-tbody td:empty{display:none;}
+  tbody#list-tbody td[data-label=""]{padding-top:2px;}
+  tbody#list-tbody .row-actions{justify-content:flex-end; padding-top:8px; border-top:1px solid var(--line-soft); margin-top:2px;}
 }
 </style>
 </head>
@@ -411,9 +452,33 @@ tbody tr:last-child td{border-bottom:none;}
     <div class="user-chip">
       <span id="user-email">-</span>
       <span class="role-badge" id="user-role-badge">-</span>
+      <button id="claim-admin-btn" class="role-gate-inverse" style="display:none;" onclick="claimAdmin()">ตั้งเป็นแอดมิน</button>
       <button onclick="handleSignOut()">ออกจากระบบ</button>
     </div>
   </div>
+
+  <div id="role-loading-banner" style="display:none;">
+    <span class="spinner"></span> กำลังตรวจสอบสิทธิ์ผู้ใช้…
+  </div>
+  <div id="role-error-banner" style="display:none;">
+    โหลดสิทธิ์ผู้ใช้ไม่สำเร็จ <button class="btn btn-sm" onclick="retryLoadProfile()">ลองใหม่</button>
+  </div>
+
+  <!-- ===== MOBILE BOTTOM NAV ===== -->
+  <nav id="bottom-nav">
+    <button data-view="dashboard" class="active" onclick="showView('dashboard')">
+      <span class="bn-ico">⌂</span><span>แดชบอร์ด</span>
+    </button>
+    <button data-view="list" onclick="showView('list')">
+      <span class="bn-ico">☰</span><span>รายการ</span>
+    </button>
+    <button data-view="form" id="bn-add-btn" class="role-gate" onclick="openForm(null)">
+      <span class="bn-ico">＋</span><span>เพิ่ม</span>
+    </button>
+    <button data-view="users" id="bn-users-btn" class="hidden" onclick="showView('users')">
+      <span class="bn-ico">☺</span><span>ผู้ใช้งาน</span>
+    </button>
+  </nav>
 
   <main>
     <!-- ===== DASHBOARD ===== -->
@@ -717,30 +782,62 @@ async function handleAuthed(user){
   document.getElementById('auth-screen').style.display = 'none';
   document.getElementById('app-shell').style.display = 'flex';
   document.getElementById('user-email').textContent = user.email;
-
-  let profile = await fetchProfile(user.id);
-  if(!profile){
-    // แก้ race condition: บางครั้ง trigger สร้างแถวใน profiles ยังไม่เสร็จ
-    // ตอนที่ session พร้อมแล้ว — รอสั้นๆ แล้วลองใหม่อีกครั้ง
-    await new Promise(res => setTimeout(res, 900));
-    profile = await fetchProfile(user.id);
-  }
-  currentProfile = profile || { role: 'viewer' };
-  applyRoleUI();
+  await loadProfileWithRetry();
   showView('dashboard');
 }
 
-async function fetchProfile(userId){
-  const { data, error } = await sb.from('profiles').select('*').eq('id', userId).maybeSingle();
-  if(error){ showToast('โหลดข้อมูลผู้ใช้ไม่สำเร็จ: ' + error.message, true); return null; }
-  return data;
+async function loadProfileWithRetry(){
+  const loadingBanner = document.getElementById('role-loading-banner');
+  const errorBanner = document.getElementById('role-error-banner');
+  errorBanner.style.display = 'none';
+  loadingBanner.style.display = 'flex';
+
+  // trigger ที่สร้างแถว profiles ให้อัตโนมัติตอนสมัครสมาชิกอาจยังไม่เสร็จทัน
+  // ที่ session พร้อม — ลองซ้ำเป็นจังหวะแทนที่จะเชื่อผลครั้งแรกครั้งเดียว
+  const delays = [0, 700, 1500];
+  let profile = null, lastError = null;
+  for(const delay of delays){
+    if(delay) await new Promise(res => setTimeout(res, delay));
+    const { data, error } = await sb.from('profiles').select('*').eq('id', currentUser.id).maybeSingle();
+    if(error){ lastError = error; continue; }
+    if(data){ profile = data; break; }
+  }
+
+  loadingBanner.style.display = 'none';
+  if(profile){
+    currentProfile = profile;
+    applyRoleUI();
+  } else {
+    // ไม่เจอ profile เลยหลังลองครบ — อย่าเดาว่าเป็น viewer เงียบๆ ให้ผู้ใช้เห็นและลองใหม่เองได้
+    errorBanner.style.display = 'flex';
+    currentProfile = null;
+    applyRoleUI();
+    if(lastError) console.error('โหลด profile ไม่สำเร็จ:', lastError.message);
+  }
+}
+
+function retryLoadProfile(){ loadProfileWithRetry(); }
+
+async function claimAdmin(){
+  const btn = document.getElementById('claim-admin-btn');
+  btn.disabled = true; btn.textContent = 'กำลังตั้งค่า…';
+  const { data, error } = await sb.rpc('claim_admin_if_none');
+  btn.disabled = false; btn.textContent = 'ตั้งเป็นแอดมิน';
+  if(error){ showToast('ทำไม่สำเร็จ: ' + error.message, true); return; }
+  if(data === 'promoted'){
+    showToast('ตั้งเป็นแอดมินเรียบร้อย');
+    await loadProfileWithRetry();
+  } else {
+    showToast('มีแอดมินอยู่แล้วในระบบ กรุณาติดต่อแอดมินเพื่อขอสิทธิ์', true);
+    btn.style.display = 'none';
+  }
 }
 
 function applyRoleUI(){
   // normalize กันเคส role เป็น 'Admin' / มีช่องว่างติดมา แล้วเทียบไม่ตรง
-  const rawRole = currentProfile?.role || 'viewer';
-  const role = String(rawRole).trim().toLowerCase();
-  document.getElementById('user-role-badge').textContent = rawRole;
+  const rawRole = currentProfile?.role || null;
+  const role = rawRole ? String(rawRole).trim().toLowerCase() : null;
+  document.getElementById('user-role-badge').textContent = rawRole || '?';
   document.querySelectorAll('.role-gate').forEach(el => {
     el.style.display = (role === 'admin' || role === 'staff') ? '' : 'none';
   });
@@ -748,13 +845,17 @@ function applyRoleUI(){
     el.style.display = (role === 'admin') ? '' : 'none';
   });
   document.getElementById('nav-users-btn').classList.toggle('hidden', role !== 'admin');
+  document.getElementById('bn-users-btn').classList.toggle('hidden', role !== 'admin');
+  // ปุ่ม "ตั้งเป็นแอดมิน" โชว์ให้ทุกคนที่ยังไม่ใช่ admin กด (ฟังก์ชันฝั่ง DB จะเช็คเองว่ามี admin แล้วหรือยัง)
+  document.getElementById('claim-admin-btn').style.display = (role !== 'admin') ? '' : 'none';
 }
 
 /* ---------------- NAV ---------------- */
 function showView(name){
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-' + name).classList.add('active');
-  document.querySelectorAll('.nav-tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === name));
+  document.querySelectorAll('.nav-tabs button, #bottom-nav button').forEach(b => b.classList.toggle('active', b.dataset.view === name));
+  window.scrollTo(0,0);
   if(name === 'dashboard') loadDashboard();
   if(name === 'list') loadList();
   if(name === 'users') loadUsers();
@@ -832,13 +933,13 @@ async function loadList(){
   if(!data || data.length === 0){ tbody.innerHTML = `<tr><td colspan="7"><div class="empty-note">ไม่พบข้อมูล</div></td></tr>`; document.getElementById('list-count').textContent=''; return; }
   tbody.innerHTML = data.map(r => `
     <tr onclick="viewDetail('${r.id}')" style="cursor:pointer">
-      <td class="hn-cell">${escapeHtml(r.hn||'-')}</td>
-      <td>${escapeHtml(r.full_name||'-')}</td>
-      <td>${procedureTag(r.procedure)}</td>
-      <td>${formatDate(r.surgery_date)}</td>
-      <td class="mono">${r.bmi ?? '—'}</td>
-      <td>${(r.record_images?.[0]?.count) || 0} 🖼️</td>
-      <td class="row-actions" onclick="event.stopPropagation()">
+      <td class="hn-cell" data-label="HN">${escapeHtml(r.hn||'-')}</td>
+      <td data-label="ชื่อ-สกุล">${escapeHtml(r.full_name||'-')}</td>
+      <td data-label="Procedure">${procedureTag(r.procedure)}</td>
+      <td data-label="วันที่ผ่าตัด">${formatDate(r.surgery_date)}</td>
+      <td class="mono" data-label="BMI">${r.bmi ?? '—'}</td>
+      <td data-label="รูป">${(r.record_images?.[0]?.count) || 0} 🖼️</td>
+      <td class="row-actions" data-label="" onclick="event.stopPropagation()">
         <button class="btn btn-sm" onclick="viewDetail('${r.id}')">ดู</button>
       </td>
     </tr>
