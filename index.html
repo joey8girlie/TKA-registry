@@ -425,7 +425,7 @@ tbody tr:last-child td{border-bottom:none;}
     <div id="auth-msg"></div>
 
     <form id="signin-form" onsubmit="return handleSignIn(event)">
-      <div class="field"><label>Username (English)</label><input type="text" id="si-email" required autocomplete="username"></div>
+      <div class="field"><label>Email หรือ Username</label><input type="text" id="si-email" required autocomplete="username" placeholder="Email เดิม หรือ Username"></div>
       <div class="field"><label>รหัสผ่าน</label><input type="password" id="si-password" required autocomplete="current-password"></div>
       <button class="btn btn-primary" type="submit" id="si-btn">เข้าสู่ระบบ</button>
     </form>
@@ -454,7 +454,7 @@ tbody tr:last-child td{border-bottom:none;}
           <path d="M6.5 3.2c1.5 0 2.7 1.2 2.7 2.7 0 .4-.1.8-.2 1.1l6.4 6.4c.3-.1.7-.2 1.1-.2 1.5 0 2.7 1.2 2.7 2.7s-1.2 2.7-2.7 2.7c-1.5 0-2.7-1.2-2.7-2.7 0-.4.1-.8.2-1.1L7.6 8.4c-.3.1-.7.2-1.1.2-1.5 0-2.7-1.2-2.7-2.7s1.2-2.7 2.7-2.7z" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
         </svg>
       </div>
-      <div class="titles"><b>TKA Registry</b><span>Total Knee Arthroplasty - Sungmen Hospital  (Develop by Udomsak THouekaew)</span></div>
+      <div class="titles"><b>TKA Registry</b><span>v2 · Total Knee Arthroplasty</span></div>
     </div>
     <div class="nav-tabs">
       <button data-view="dashboard" class="active" onclick="showView('dashboard')">แดชบอร์ด</button>
@@ -815,23 +815,31 @@ async function handleSignIn(e){
   e.preventDefault();
   document.getElementById('auth-error').textContent = '';
   const btn = document.getElementById('si-btn'); btn.disabled = true; btn.textContent = 'กำลังเข้าสู่ระบบ…';
-  const username = document.getElementById('si-email').value.trim();
+  const loginValue = document.getElementById('si-email').value.trim();
   const password = document.getElementById('si-password').value;
-  const usernameRegex = /^[A-Za-z][A-Za-z0-9._-]{2,31}$/;
-  if(!usernameRegex.test(username)){
-    document.getElementById('auth-error').textContent = 'Username ต้องเป็นภาษาอังกฤษเท่านั้น และยาว 3–32 ตัวอักษร';
-    btn.disabled = false; btn.textContent = 'เข้าสู่ระบบ';
-    return false;
+
+  // รองรับทั้งบัญชีเดิมที่ Login ด้วย Email และบัญชีใหม่ที่ Login ด้วย Username
+  let loginEmail = loginValue;
+
+  if(!loginValue.includes('@')){
+    const usernameRegex = /^[A-Za-z][A-Za-z0-9._-]{2,31}$/;
+    if(!usernameRegex.test(loginValue)){
+      document.getElementById('auth-error').textContent = 'กรุณากรอก Email เดิม หรือ Username ภาษาอังกฤษ';
+      btn.disabled = false; btn.textContent = 'เข้าสู่ระบบ';
+      return false;
+    }
+
+    // Username login ต้องมี RPC lookup_login_email ใน Supabase
+    const { data: emailData, error: lookupError } = await sb.rpc('lookup_login_email', { p_username: loginValue });
+    if(lookupError || !emailData){
+      document.getElementById('auth-error').textContent = 'ไม่พบ Username นี้ หรือยังไม่ได้ตั้งค่า Username Login';
+      btn.disabled = false; btn.textContent = 'เข้าสู่ระบบ';
+      return false;
+    }
+    loginEmail = emailData;
   }
 
-  const { data: emailData, error: lookupError } = await sb.rpc('lookup_login_email', { p_username: username });
-  if(lookupError || !emailData){
-    document.getElementById('auth-error').textContent = 'Username หรือรหัสผ่านไม่ถูกต้อง';
-    btn.disabled = false; btn.textContent = 'เข้าสู่ระบบ';
-    return false;
-  }
-
-  const { error } = await sb.auth.signInWithPassword({ email: emailData, password });
+  const { error } = await sb.auth.signInWithPassword({ email: loginEmail, password });
   btn.disabled = false; btn.textContent = 'เข้าสู่ระบบ';
   if(error){ document.getElementById('auth-error').textContent = 'Username หรือรหัสผ่านไม่ถูกต้อง'; }
   return false;
